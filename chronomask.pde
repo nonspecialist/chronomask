@@ -1,5 +1,6 @@
 import processing.video.*;
 import controlP5.*;
+import java.util.Arrays;
 
 java.awt.Insets insets;
 
