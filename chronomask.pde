@@ -37,7 +37,7 @@ class VideoThing {
     if (0 == cameras.length) {
       // This uses a callback to return the movie path
       println("There are no cameras");
-      selectInput("Select a movie to floob...", "loadMovie");
+      selectInput("Select a movie to chronomask ...", "loadMovie");
     } else {
       load_capture(cameras);
     }
@@ -72,10 +72,13 @@ class VideoThing {
   
   void set_stream(Movie m) {
     movie = m;
-    movie.play();
+    movie.loop();
     movie.volume(0);
+    movie.read();
     videox = movie.width; videoy = movie.height;
     need_movie = false;
+    is_ready = true;
+    cam = null;
   }
 
   void draw() {
@@ -377,6 +380,8 @@ int MAX_TWORK = 4;
 void loadMovie(File path) {
   if (null != path) {
     video.set_stream(new Movie(this, path.getAbsolutePath()));
+    framestack = new FrameStack(levels, video.width(), video.height());
+    chronomask.resize(video.width(), video.height());
   }
 }
 
@@ -540,5 +545,10 @@ void keyPressed() {
       case 4: println("chrono_delay red test"); break;
       default: println("Unknown mode!"); break;
     }
+  }
+  
+  if (key == 'v' || key == 'V') {
+    need_movie = true;
+    selectInput("Select a movie to chronomask ...", "loadMovie");
   }
 }
