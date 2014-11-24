@@ -8,7 +8,7 @@ java.awt.Insets insets;
 int coarseness = 10;
 int levels = 0;
 
-String maskdir = "/home/cmp/sketchbook/gradient_mask/data";
+String maskdir = "/home/cmp/sketchbook/chronomask/data";
 
 boolean need_movie = true;
 boolean need_mask = true;
@@ -185,7 +185,7 @@ class VideoThing {
 // The ChronoMask is the thing that determines how we distort/delay the VideoThing
 class ChronoMask {
   private PApplet parent;
-  private PImage chronomask;
+  private PImage _chronomask;
   private File defaultMask = new File(maskdir + "/zero_change_all_black.png");
   private boolean is_ready = false;
   // Hold the size we want to end up at (set from the video stream)
@@ -207,16 +207,16 @@ class ChronoMask {
   }
 
   int width() {
-    return chronomask.width;
+    return _chronomask.width;
   }
 
   int height() {
-    return chronomask.height;
+    return _chronomask.height;
   }
   
   color get_pixel(int pixel_offset) {
     // println("chronomask.get_pixel(" + pixel_offset + ")");
-    return chronomask.pixels[pixel_offset];
+    return _chronomask.pixels[pixel_offset];
   }
 
   void load() {
@@ -225,8 +225,8 @@ class ChronoMask {
 
   void load(String path) {
     println("Load new chronomask from "  + path);
-    chronomask = loadImage(path);
-    chronomask.loadPixels();
+    _chronomask = loadImage(path);
+    _chronomask.loadPixels();
     this.resize();
     is_ready = true;
     need_mask = false;
@@ -234,24 +234,24 @@ class ChronoMask {
 
   // set the current mask to a specific image
   void set(PImage img) {
-    chronomask = img;
+    _chronomask = img;
   }
 
   // change the mask size to match the size of the video stream
   void resize() {
-    println("Got chronomask " + chronomask.width + "x" + chronomask.height);
+    println("Got chronomask " + this.width() + "x" + this.height());
     println("Got video " + intended_x + "x" + intended_y);
-    if ((intended_x != chronomask.width) || (intended_y != chronomask.height)) {
+    if ((intended_x != this.width()) || (intended_y != this.height())) {
       println("NOTICE: Mask (" 
-              + chronomask.width + "x" + chronomask.height + 
+              + this.width()+ "x" + this.height() + 
               ") and video size (" 
               + intended_x + "x" + intended_y + 
               ") mismatch, resizing chronomask");
       PImage newmask = new PImage(intended_x, intended_y);
-      newmask.copy(chronomask, 0, 0, chronomask.width, chronomask.height, 0, 0, intended_x, intended_y);
-      chronomask = newmask;
+      newmask.copy(_chronomask, 0, 0, this.width(), this.height(), 0, 0, intended_x, intended_y);
+      _chronomask = newmask;
     }
-    chronomask.loadPixels();
+    _chronomask.loadPixels();
   }
 
   void resize(int sizex, int sizey) {
@@ -261,28 +261,28 @@ class ChronoMask {
 
   // flip the mask data top to bottom
   void flip_vertical() {
-    PImage newmask = new PImage(chronomask.width, chronomask.height);
-    for (int i=0; i < chronomask.height; i++) {
-      for (int j=0; j < chronomask.width; j++) {
-        newmask.set(j, i, chronomask.get(j, chronomask.height - i));
+    PImage newmask = new PImage(this.width(), this.height());
+    for (int i=0; i < this.height(); i++) {
+      for (int j=0; j < this.width(); j++) {
+        newmask.set(j, i, _chronomask.get(j, this.height() - i));
       }
     }
-    chronomask = newmask;
-    chronomask.updatePixels();
-    chronomask.loadPixels();
+    _chronomask = newmask;
+    _chronomask.updatePixels();
+    _chronomask.loadPixels();
   }
 
   // flip the mask data left to right
   void flip_horizontal() {
-    PImage newmask = new PImage(chronomask.width, chronomask.height);
-    for (int i=0; i < chronomask.height; i++) {
-      for (int j=0; j < chronomask.width; j++) {
-        newmask.set(j, i, chronomask.get(chronomask.width - j, i));
+    PImage newmask = new PImage(this.width(), this.height());
+    for (int i=0; i < this.height(); i++) {
+      for (int j=0; j < this.width(); j++) {
+        newmask.set(j, i, _chronomask.get(this.width() - j, i));
       }
     }
-    chronomask = newmask;
-    chronomask.updatePixels();
-    chronomask.loadPixels();
+    _chronomask = newmask;
+    _chronomask.updatePixels();
+    _chronomask.loadPixels();
   }
 
   // Load in a random mask file from the default mask directory
@@ -304,7 +304,7 @@ class ChronoMask {
     String randomMask = (String) masks.get(int(random(0, masks.size())));
     
     println("Chose random mask " + randomMask);
-    load(maskdir + "/" + randomMask);
+    this.load(maskdir + "/" + randomMask);
   }
 
 }
@@ -350,6 +350,7 @@ class FrameStack {
 VideoThing video;
 ChronoMask chronomask;
 FrameStack framestack;
+PImage display_buf;
 
 // DOCUMENTATION FOR FUTURE ENUM
 // Processing can't handle enums natively at the moment
@@ -413,6 +414,7 @@ void setup() {
     Thread.yield();
   }
   
+  println("Canvas size setting to " + video.width() + "x" + video.height());
   frame.setResizable(true);
   frame.setSize(
       video.width() + insets.left + insets.right, 
@@ -420,12 +422,12 @@ void setup() {
   );
   size(video.width(), video.height());
   frame.setLocation(0, 0);
-  println("Canvas size setting to " + video.width() + "x" + video.height());
 
   levels = round(min(video.width(), video.height())/coarseness);
   println("Generating " + levels + " levels with coarseness " + coarseness);
 
   framestack = new FrameStack(levels, video.width(), video.height());
+  display_buf = new PImage(width, height);
 }
 
 // -- draw is called once per frame
@@ -470,8 +472,23 @@ void draw() {
       }
     }
   }
-
-  set(0, 0, framestack.rotate());
+  
+  // scale the image to the frame size. We create a copy of the image here
+  if (display_buf.width != width || display_buf.height != height) {
+    println("display_buf needs to be resized to " + width + "x" + height);
+    display_buf.resize(width, height);
+  }
+  // because rotating the framestack only returns a pointer to the frame,
+  // and if we resize that, we end up breaking the framestack 
+  display_buf.copy(framestack.rotate(),
+                   0, 0, video.width(), video.height(),
+                   0, 0, display_buf.width, display_buf.height);
+  display_buf.updatePixels();
+  // println("Chronomask is " + chronomask.width() + "x" + chronomask.height() + ", " + 
+  //  "Video is " + video.width() + "x" + video.height() + ", " +
+  //  "Scaling image to " + width + "x" + height);
+  
+  set(0, 0, display_buf);
 }
 
 void keyPressed() {
