@@ -382,6 +382,11 @@ void loadMovie(File path) {
     video.set_stream(new Movie(this, path.getAbsolutePath()));
     framestack = new FrameStack(levels, video.width(), video.height());
     chronomask.resize(video.width(), video.height());
+    size(video.width(), video.height());
+    frame.setSize(
+        video.width() + insets.left + insets.right, 
+        video.height() + insets.top + insets.bottom
+    );
   }
 }
 
