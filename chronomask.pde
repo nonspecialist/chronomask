@@ -73,7 +73,7 @@ class VideoThing {
   void set_stream(Movie m) {
     movie = m;
     movie.loop();
-    movie.volume(0);
+    movie.volume(1);
     movie.read();
     videox = movie.width; videoy = movie.height;
     need_movie = false;
