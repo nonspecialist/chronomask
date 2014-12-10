@@ -473,8 +473,10 @@ void draw() {
           framestack.put_pixel(to_frame_nr, i, video.get_pixel(i));
           break;   
         case 4: // RGB test mode
-          to_frame_nr = int(map(red(chronomask.get_pixel(i)), 0, 255, 0, (levels - 1)));
-          framestack.put_pixel(to_frame_nr, i, video.get_pixel(i) );
+          int red_val = chronomask.get_pixel(i) >> 16 & 0xFF;
+          to_frame_nr = int(map(red_val, 0, 255, 0, (levels - 1)));
+          int red_pixel = video.get_pixel(i) >> 16 & 0xFF;
+          framestack.put_pixel(to_frame_nr, i, red_pixel );
           break;
         default:
           println("Unknown mode " + twork_mode);
