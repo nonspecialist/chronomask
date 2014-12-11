@@ -1,6 +1,7 @@
 import processing.video.*;
 import controlP5.*;
 import java.util.Arrays;
+import java.util.Date;
 
 java.awt.Insets insets;
 
@@ -340,6 +341,16 @@ class FrameStack {
     frames.get(framenr).pixels[pixel_offset] = pixel;
   }
   
+  void blend_pixel(int framenr, int pixel_offset, color pixel, int mode) {
+    color tmp = frames.get(framenr).pixels[pixel_offset];
+    frames.get(framenr).pixels[pixel_offset] = blendColor(tmp, pixel, mode);
+  }
+  
+  void unblend_pixel(int framenr, int pixel_offset, color pixel, int mode) {
+    color tmp = frames.get(framenr).pixels[pixel_offset];
+    frames.get(framenr).pixels[pixel_offset] = blendColor(tmp, pixel, mode);
+  }
+
   color get_pixel(int framenr, int pixel_offset) {
     return frames.get(framenr).pixels[pixel_offset];
   }
@@ -372,6 +383,14 @@ PImage display_buf;
 int twork_mode = 1;
 int MAX_TWORK = 4;
 
+// how to blend frames in blend mode
+int blend_mode = LIGHTEST;
+
+// FPS to aim for
+int FPS = 25;
+
+// how to transfer the chronomasked image into the display buffer
+TransferMode transfer_mode = TransferMode.MODE_COPY;
 
 // These need to be external to the classes, as they're used as callbacks 
 // by framework functions.
@@ -404,7 +423,7 @@ void loadMask(File path) {
 
 // - setup is used to initialize the environment. It's called once only.
 void setup() {
-  frameRate(25);
+  frameRate(FPS);
   background(color(0));
   frame.pack();
   insets = frame.getInsets();
@@ -450,6 +469,7 @@ void draw() {
     video.read();
   }
   
+  Date pre_twork = new Date();
   if (video.running()) {
     int to_frame_nr;
     // so now we have a new frame ... according to the values in the chronomask,
@@ -462,7 +482,18 @@ void draw() {
           // We use map to bring the potential full range of brightnesses into
           // the range of the number of levels that we have
           to_frame_nr = int(map(brightness(chronomask.get_pixel(i)), 0, 255, 0, (levels - 1)));
-          framestack.put_pixel(to_frame_nr, i, video.get_pixel(i));
+          switch (transfer_mode) {
+            case MODE_COPY:
+              framestack.put_pixel(to_frame_nr, i, video.get_pixel(i)); break;
+            case MODE_BLEND:
+              int prev_frame_nr = to_frame_nr - levels;
+              if (prev_frame_nr < 0) {
+                prev_frame_nr = levels - 1;
+              }
+              framestack.blend_pixel(to_frame_nr, i, video.get_pixel(i), blend_mode);
+              framestack.unblend_pixel(prev_frame_nr, i, video.get_pixel(i), REPLACE);
+              break;
+          }
           break;
         case 2: // a simple image overlay of the mask on top of the video
           framestack.put_pixel(0, i, blendColor(video.get_pixel(i), chronomask.get_pixel(i), SOFT_LIGHT));
@@ -485,22 +516,53 @@ void draw() {
     }
   }
   
+  Date pre_resize = new Date();
+  
   // scale the image to the frame size. We create a copy of the image here
   if (display_buf.width != width || display_buf.height != height) {
     println("display_buf needs to be resized to " + width + "x" + height);
     display_buf.resize(width, height);
   }
+  
+  Date pre_copy = new Date();
   // because rotating the framestack only returns a pointer to the frame,
   // and if we resize that, we end up breaking the framestack 
   display_buf.copy(framestack.rotate(),
-                   0, 0, video.width(), video.height(),
-                   0, 0, display_buf.width, display_buf.height);
+               0, 0, video.width(), video.height(),
+               0, 0, display_buf.width, display_buf.height);
+                   
+  Date pre_update = new Date();
   display_buf.updatePixels();
   // println("Chronomask is " + chronomask.width() + "x" + chronomask.height() + ", " + 
   //  "Video is " + video.width() + "x" + video.height() + ", " +
   //  "Scaling image to " + width + "x" + height);
   
+  Date pre_set = new Date();
   set(0, 0, display_buf);
+  
+  Date end_draw = new Date();
+  long twork_time = pre_resize.getTime() - pre_twork.getTime();
+  long resize_time = pre_copy.getTime() - pre_resize.getTime();
+  long copy_time = pre_update.getTime() - pre_copy.getTime();
+  long update_time = pre_set.getTime() - pre_update.getTime();
+  long set_time = end_draw.getTime() - pre_set.getTime();
+  long total_time = end_draw.getTime() - pre_twork.getTime();
+  float fps_max = FPS;
+  if (total_time != 0) {
+    fps_max = 1 / ((float)total_time / 1000);
+    if (fps_max > FPS) {
+      fps_max = FPS;
+    }
+  } 
+  print("Timing: twork: " + twork_time +
+    ", resize: " + resize_time +
+    ", copy: " + copy_time +
+    ", update: " + update_time +
+    ", set: " + set_time +
+    ", TOTAL: " + total_time +
+    ", fps: " + fps_max +
+    "\r"
+  );
 }
 
 void keyPressed() {
@@ -513,6 +575,7 @@ void keyPressed() {
     println("Loading a new chronomask");
     need_mask = true;
     chronomask.load();
+    return;
   }
   
   // flip mask vertically
@@ -523,6 +586,7 @@ void keyPressed() {
   if (key == 'w' || key == 'W') {
     println(millis() + " - vertical flip");
     chronomask.flip_vertical();
+    return;
   }
   
   // flip mask horizontally
@@ -530,6 +594,7 @@ void keyPressed() {
   if (key == 'a' || key == 'A') {
     println("horizontal flip");
     chronomask.flip_horizontal();
+    return;
   }
   
   // choose random mask 
@@ -537,6 +602,7 @@ void keyPressed() {
   if (key == 'd' || key == 'D') {
     println("Load random chronomask");
     chronomask.load_random();
+    return;
   }
   
   // Change the tworking mode
@@ -552,10 +618,49 @@ void keyPressed() {
       case 4: println("chrono_delay red test"); break;
       default: println("Unknown mode!"); break;
     }
+    return;
+  }
+  
+  // change between copy and blend
+  if (key == 'c' || key == 'C') {
+    transfer_mode = TransferMode.MODE_COPY;
+    println("Switching to COPY mode");
+    return;
+  }
+  if (key == 'b' || key == 'B') {
+    transfer_mode = TransferMode.MODE_BLEND;
+    println("Switching to BLEND mode");
+    println("BLEND mode is " + blend_mode);
+    return;
+  }
+  
+  if (key == 'l' || key == 'L') {
+    switch (blend_mode) {
+      case BLEND:      blend_mode = ADD;        break;
+      case ADD:        blend_mode = SUBTRACT;   break;
+      case SUBTRACT:   blend_mode = DARKEST;    break;
+      case DARKEST:    blend_mode = LIGHTEST;   break;
+      case LIGHTEST:   blend_mode = DIFFERENCE; break;
+      case DIFFERENCE: blend_mode = EXCLUSION;  break;
+      case EXCLUSION:  blend_mode = MULTIPLY;   break;
+      case MULTIPLY:   blend_mode = SCREEN;     break;
+      case SCREEN:     blend_mode = OVERLAY;    break;
+      case OVERLAY:    blend_mode = HARD_LIGHT; break;
+      case HARD_LIGHT: blend_mode = SOFT_LIGHT; break;
+      case SOFT_LIGHT: blend_mode = DODGE;      break;
+      case DODGE:      blend_mode = BURN;       break;
+      case BURN:       blend_mode = BLEND;      break;
+      default:
+        println("Do not know current blend mode");
+        blend_mode = BLEND;
+        break;
+    }
+    println("BLEND mode is " + blend_mode);
   }
   
   if (key == 'v' || key == 'V') {
     need_movie = true;
     selectInput("Select a movie to chronomask ...", "loadMovie");
+    return;
   }
 }
