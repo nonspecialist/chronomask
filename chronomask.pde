@@ -6,7 +6,7 @@ import java.util.Date;
 java.awt.Insets insets;
 
 // How coarse should we make the gradient (lower == thinner slices)
-int coarseness = 10;
+int coarseness = 8;
 int levels = 0;
 
 String maskdir = "/home/cmp/sketchbook/chronomask/data";
