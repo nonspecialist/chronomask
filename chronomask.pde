@@ -389,6 +389,12 @@ int blend_mode = LIGHTEST;
 // FPS to aim for
 int FPS = 25;
 
+// Whether or not to show the loaded mask by default ('o' key)
+boolean show_mask = true;
+
+// debugging?
+boolean debug = false;
+
 // how to transfer the chronomasked image into the display buffer
 TransferMode transfer_mode = TransferMode.MODE_COPY;
 
@@ -414,6 +420,16 @@ void loadMask(File path) {
   if (null != path) {
     chronomask.load(path.getAbsolutePath());
     chronomask.resize(video.width(), video.height());
+    // copy the mask itself into all frames of the stack so that
+    // we can see what it looks like before overwriting it with the
+    // video feed
+    if (show_mask) {
+      for (int frame_nr = 0; frame_nr < levels; frame_nr++) {
+        for (int i = 0; i < (chronomask.width() * chronomask.height()); i++) {
+          framestack.put_pixel(frame_nr, i, chronomask.get_pixel(i));
+        }
+      }
+    }
   }
 }
 
@@ -553,16 +569,23 @@ void draw() {
     if (fps_max > FPS) {
       fps_max = FPS;
     }
-  } 
-  print("Timing: twork: " + twork_time +
-    ", resize: " + resize_time +
-    ", copy: " + copy_time +
-    ", update: " + update_time +
-    ", set: " + set_time +
-    ", TOTAL: " + total_time +
-    ", fps: " + fps_max +
-    "\r"
-  );
+  }
+
+  if (debug) { 
+    print("Timing: twork: " + twork_time +
+      ", resize: " + resize_time +
+      ", copy: " + copy_time +
+      ", update: " + update_time +
+      ", set: " + set_time +
+      ", TOTAL: " + total_time +
+      ", fps: " + fps_max +
+      "\r"
+    );
+  }
+  
+  if (fps_max < FPS) {
+    println("WARNING: Cannot achieve desired framerate (" + fps_max + " < " + FPS + ")");
+  }
 }
 
 void keyPressed() {
@@ -602,6 +625,16 @@ void keyPressed() {
   if (key == 'd' || key == 'D') {
     println("Load random chronomask");
     chronomask.load_random();
+    // copy the mask itself into all frames of the stack so that
+    // we can see what it looks like before overwriting it with the
+    // video feed
+    if (show_mask) {
+      for (int frame_nr = 0; frame_nr < levels; frame_nr++) {
+        for (int i = 0; i < (chronomask.width() * chronomask.height()); i++) {
+          framestack.put_pixel(frame_nr, i, chronomask.get_pixel(i));
+        }
+      }
+    }
     return;
   }
   
@@ -656,6 +689,32 @@ void keyPressed() {
         break;
     }
     println("BLEND mode is " + blend_mode);
+  }
+  
+  // flip whether to show the mask after loading it
+  if (key == 'o' || key == 'O') {
+    show_mask = !show_mask;
+    if (show_mask) {
+      println("Showing mask after loading");
+    } else {
+      println("Not showing mask after loading");
+    }
+    return;
+  }
+  
+  // turn debugging on and off
+  if (key == 'g' || key == 'G') {
+    debug = !debug;
+    return;
+  }
+
+  // reset everything
+  if (key == 't' || key == 'T') {
+      blend_mode = BLEND;
+      twork_mode = 1;
+      show_mask = true;
+      transfer_mode = TransferMode.MODE_COPY;
+      chronomask.load(maskdir + "/linear_top_down.png");
   }
   
   if (key == 'v' || key == 'V') {
