@@ -431,6 +431,8 @@ void loadMask(File path) {
       }
     }
   }
+  // nothing chosen, so we'll just carry on with the current mask
+  need_mask = false;
 }
 
 // ------------------------------------
