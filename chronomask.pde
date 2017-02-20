@@ -6,7 +6,7 @@ import java.util.Date;
 java.awt.Insets insets;
 
 // How coarse should we make the gradient (lower == thinner slices)
-int coarseness = 8;
+int coarseness = 7;
 int levels = 0;
 
 String maskdir = "/home/cmp/sketchbook/chronomask/data";
@@ -70,6 +70,17 @@ class VideoThing {
       return movie.pixels[pixel_offset];
     }
   }
+
+  int[] get_frame() {
+    if (null != cam) {
+      // println("cam.get_pixel(" + pixel_offset + ")");
+      cam.loadPixels();
+      return cam.pixels;
+    } else {
+      movie.loadPixels();
+      return movie.pixels;
+    }
+  }
   
   void set_stream(Movie m) {
     movie = m;
@@ -94,7 +105,7 @@ class VideoThing {
     println("Available cameras:");
     for (int i=0; i<cameras.length; i++) {
       println("    [" + i + "]: " + cameras[i]);
-      if (cameras[i].equals("name=/dev/video0,size=640x480,fps=25")) {
+      if (cameras[i].equals("name=/dev/video0,size=640x480,fps=30")) {
         println("Choosing camera [" + i + "]: " + cameras[i]);
         cam = new Capture(parent, cameras[i]);
         break;
@@ -190,7 +201,8 @@ class VideoThing {
 class ChronoMask {
   private PApplet parent;
   private PImage _chronomask;
-  private File defaultMask = new File(maskdir + "/zero_change_all_black.png");
+  private String defaultPath = maskdir + "/zero_change_all_black.png";
+  private File defaultMask = new File(defaultPath);
   private boolean is_ready = false;
   // Hold the size we want to end up at (set from the video stream)
   private int intended_x; private int intended_y;
@@ -203,7 +215,7 @@ class ChronoMask {
   ChronoMask(PApplet p, int sizex, int sizey) {
     parent = p;
     intended_x = sizex; intended_y = sizey;
-    this.load();
+    this.load_default();
   }
   
   boolean ready() {
@@ -223,8 +235,16 @@ class ChronoMask {
     return _chronomask.pixels[pixel_offset];
   }
 
+  PImage get_mask() {
+    return _chronomask;
+  }
+
   void load() {
     selectInput("Select a mask file", "loadMask", defaultMask);
+  }
+  
+  void load_default() {
+    this.load(defaultPath);
   }
 
   void load(String path) {
@@ -387,7 +407,7 @@ int MAX_TWORK = 4;
 int blend_mode = LIGHTEST;
 
 // FPS to aim for
-int FPS = 25;
+int FPS = 30;
 
 // Whether or not to show the loaded mask by default ('o' key)
 boolean show_mask = true;
@@ -441,6 +461,9 @@ void loadMask(File path) {
 
 // - setup is used to initialize the environment. It's called once only.
 void setup() {
+  size(640, 480, P2D);
+  noSmooth();
+  surface.setResizable(true);
   frameRate(FPS);
   background(color(0));
   frame.pack();
@@ -462,13 +485,11 @@ void setup() {
   }
   
   println("Canvas size setting to " + video.width() + "x" + video.height());
-  frame.setResizable(true);
-  frame.setSize(
+  surface.setSize(
       video.width() + insets.left + insets.right, 
       video.height() + insets.top + insets.bottom
   );
-  size(video.width(), video.height());
-  frame.setLocation(0, 0);
+  surface.setLocation(0, 0);
 
   levels = round(min(video.width(), video.height())/coarseness);
   println("Generating " + levels + " levels with coarseness " + coarseness);
@@ -490,6 +511,12 @@ void draw() {
   Date pre_twork = new Date();
   if (video.running()) {
     int to_frame_nr;
+    int[] frame;
+    PImage mask;
+
+    mask = chronomask.get_mask();
+    frame = video.get_frame();
+
     // so now we have a new frame ... according to the values in the chronomask,
     // we copy pixels into the frame stack at that depth (so a value of zero means
     // copy into the front of the frame stack, a value of 17 means copy that pixel 
@@ -499,32 +526,32 @@ void draw() {
         case 1: // CHRONO DELAY BASED ON MASK BRIGHTNESS
           // We use map to bring the potential full range of brightnesses into
           // the range of the number of levels that we have
-          to_frame_nr = int(map(brightness(chronomask.get_pixel(i)), 0, 255, 0, (levels - 1)));
+          to_frame_nr = int(map(brightness(mask.pixels[i]), 0, 255, 0, (levels - 1)));
           switch (transfer_mode) {
             case MODE_COPY:
-              framestack.put_pixel(to_frame_nr, i, video.get_pixel(i)); break;
+              framestack.put_pixel(to_frame_nr, i, frame[i]); break;
             case MODE_BLEND:
               int prev_frame_nr = to_frame_nr - levels;
               if (prev_frame_nr < 0) {
                 prev_frame_nr = levels - 1;
               }
-              framestack.blend_pixel(to_frame_nr, i, video.get_pixel(i), blend_mode);
-              framestack.unblend_pixel(prev_frame_nr, i, video.get_pixel(i), REPLACE);
+              framestack.blend_pixel(to_frame_nr, i, frame[i], blend_mode);
+              framestack.unblend_pixel(prev_frame_nr, i, frame[i], REPLACE);
               break;
           }
           break;
         case 2: // a simple image overlay of the mask on top of the video
-          framestack.put_pixel(0, i, blendColor(video.get_pixel(i), chronomask.get_pixel(i), SOFT_LIGHT));
+          framestack.put_pixel(0, i, blendColor(frame[i], mask.pixels[i], SOFT_LIGHT));
           break;
         case 3: // first frame is the new chronomask, use the chrono_delay code
           // This doesn't work very well, it's quite expensive 
           to_frame_nr = int(map( brightness(framestack.get_pixel(0, i)), 0, 255, 0, (levels - 1)));
-          framestack.put_pixel(to_frame_nr, i, video.get_pixel(i));
+          framestack.put_pixel(to_frame_nr, i, frame[i]);
           break;   
         case 4: // RGB test mode
-          int red_val = chronomask.get_pixel(i) >> 16 & 0xFF;
+          int red_val = mask.pixels[i] >> 16 & 0xFF;
           to_frame_nr = int(map(red_val, 0, 255, 0, (levels - 1)));
-          int red_pixel = video.get_pixel(i) >> 16 & 0xFF;
+          int red_pixel = frame[i] >> 16 & 0xFF;
           framestack.put_pixel(to_frame_nr, i, red_pixel );
           break;
         default:
