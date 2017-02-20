@@ -8,8 +8,7 @@ Processing code to warp and generally mess with a video stream
 You'll need `processing` -- you can download it from
 http://processing.org/
 
-This code is known to run against Processing v2.2.1 -- and that's pretty
-much the only guarantee I can give ;)
+This code is known to run against Processing v3.2.1.
 
 You'll also need the ControlP5 library -- available from
 http://www.sojamo.de/libraries/controlP5/. Download the zip file and
